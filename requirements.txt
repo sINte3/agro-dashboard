@@ -4,3 +4,5 @@ python-telegram-bot==22.7
 streamlit==1.45.0
 folium==0.19.3
 streamlit-folium
+pandas
+altair==5.3.0
