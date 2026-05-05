@@ -8,13 +8,15 @@ import streamlit as st
 from dotenv import load_dotenv
 from streamlit_folium import st_folium
 
-from weather import get_weather, get_weather_status, check_flight_safety
+from weather import get_weather, get_weather_status, check_flight_safety, has_precipitation
 from ndvi import get_mock_ndvi, analyze_ndvi
 from telemetry import get_active_machinery
 
 load_dotenv()
 
 FIELDS_FILE = os.path.join(os.path.dirname(__file__), "fields.json")
+
+WIND_SPEED_LIMIT = 6.0  # м/с — максимальная скорость ветра для DJI Agras T40
 
 st.set_page_config(
     page_title="Агрокластер — Панель управления",
@@ -43,6 +45,8 @@ if not st.session_state.authenticated:
 # ── Дашборд (только для авторизованных) ──────────────────────────────────────
 if "operations_log" not in st.session_state:
     st.session_state.operations_log = []
+if "safety_blocks_logged" not in st.session_state:
+    st.session_state.safety_blocks_logged = set()
 
 st.title("🌾 Панель управления Агрокластером")
 st.caption("Данные о погоде и состоянии вегетации по полям Бухарской области")
@@ -70,6 +74,7 @@ def fetch_field_data(lat: float, lon: float) -> dict:
         .replace("NDVI: ", "")
     )
     safe, danger_reason = check_flight_safety(data)
+    precipitation = has_precipitation(data)
     return {
         "temp": temp,
         "wind": wind,
@@ -79,6 +84,7 @@ def fetch_field_data(lat: float, lon: float) -> dict:
         "ndvi_text": ndvi_text_clean,
         "flight_safe": safe,
         "flight_danger_reason": danger_reason,
+        "has_precipitation": precipitation,
     }
 
 
@@ -234,15 +240,17 @@ for col, field in zip(cols, fields):
 
             # Панель диспетчеризации
             st.markdown("#### 🎛️ Панель управления")
-            flight_safe = d["flight_safe"]
-            flight_reason = d["flight_danger_reason"]
+            wind_too_strong = d["wind"] > WIND_SPEED_LIMIT
+            precipitation = d["has_precipitation"]
 
             col1, col2 = st.columns(2)
+
+            # ── Дрон DJI Agras T40 ──────────────────────────────────────────
             if col1.button(
                 "🚁 Направить DJI Agras",
                 key=f"drone_{name}",
                 use_container_width=True,
-                disabled=not flight_safe,
+                disabled=wind_too_strong,
             ):
                 st.toast(f"Команда отправлена: DJI Agras T40 вылетает на {name}!", icon="🚁")
                 st.session_state.operations_log.append({
@@ -250,15 +258,33 @@ for col, field in zip(cols, fields):
                     "Поле": name,
                     "Техника": "🚁 DJI Agras T40",
                     "Команда": "Отправить дрон",
+                    "Статус": "Выполнено",
                 })
 
-            if not flight_safe:
+            if wind_too_strong:
                 st.markdown(
-                    f"<div style='color:#ff4b4b; font-size:0.85em; margin-top:4px'>"
-                    f"⚠️ Вылет запрещен: {flight_reason}!</div>",
+                    "<div style='color:#ff4b4b; font-size:0.85em; margin-top:4px'>"
+                    "⛔ Полет запрещен: опасный ветер!</div>",
+                    unsafe_allow_html=True,
+                )
+                block_key = f"{name}_drone_wind"
+                if block_key not in st.session_state.safety_blocks_logged:
+                    st.session_state.safety_blocks_logged.add(block_key)
+                    st.session_state.operations_log.append({
+                        "Время": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
+                        "Поле": name,
+                        "Техника": "🚁 DJI Agras T40",
+                        "Команда": "Отказ системы по безопасности",
+                        "Статус": f"Ветер {d['wind']:.1f} м/с > {WIND_SPEED_LIMIT} м/с",
+                    })
+            else:
+                st.markdown(
+                    "<div style='color:#21c354; font-size:0.85em; margin-top:4px'>"
+                    "✅ Погода летная</div>",
                     unsafe_allow_html=True,
                 )
 
+            # ── Трактор FJDynamics ───────────────────────────────────────────
             if col2.button("🚜 Маршрут для трактора", key=f"tractor_{name}", use_container_width=True):
                 st.toast(f"Координаты загружены в автопилот FJDynamics. Трактор выдвигается на {name}.", icon="🚜")
                 st.session_state.operations_log.append({
@@ -266,7 +292,25 @@ for col, field in zip(cols, fields):
                     "Поле": name,
                     "Техника": "🚜 FJDynamics Трактор",
                     "Команда": "Маршрут трактору",
+                    "Статус": "Выполнено",
                 })
+
+            if precipitation:
+                st.markdown(
+                    "<div style='color:#ffa500; font-size:0.85em; margin-top:4px'>"
+                    "⚠️ Внимание: осадки. Проверьте состояние почвы</div>",
+                    unsafe_allow_html=True,
+                )
+                block_key = f"{name}_tractor_rain"
+                if block_key not in st.session_state.safety_blocks_logged:
+                    st.session_state.safety_blocks_logged.add(block_key)
+                    st.session_state.operations_log.append({
+                        "Время": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
+                        "Поле": name,
+                        "Техника": "🚜 FJDynamics Трактор",
+                        "Команда": "Отказ системы по безопасности",
+                        "Статус": "Осадки — риск размыва грунта",
+                    })
 
 st.divider()
 
