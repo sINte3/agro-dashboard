@@ -6,6 +6,7 @@ load_dotenv()
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 WIND_SPEED_LIMIT = float(os.getenv("WIND_SPEED_LIMIT", 10))  # м/с
+DRONE_WIND_LIMIT = 6.0  # м/с — лимит для дронов
 
 WEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
 
@@ -51,6 +52,21 @@ def get_weather_status(data: dict) -> tuple[str, str]:
         tech_status = "🟢 Условия идеальны для дронов и тракторов."
 
     return summary, tech_status
+
+
+def check_flight_safety(weather_data: dict) -> tuple[bool, str]:
+    """
+    Проверяет безопасность вылета дрона.
+    Возвращает (безопасно: bool, причина запрета: str).
+    """
+    wind_speed = weather_data["wind"]["speed"]
+    weather_id = weather_data["weather"][0]["id"]
+
+    if wind_speed > DRONE_WIND_LIMIT:
+        return False, f"сильный ветер ({wind_speed:.1f} м/с)"
+    if weather_id in PRECIPITATION_CODES:
+        return False, "осадки (дождь/снег)"
+    return True, ""
 
 
 def analyze_weather(data: dict) -> str:

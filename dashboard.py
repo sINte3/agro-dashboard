@@ -8,7 +8,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from streamlit_folium import st_folium
 
-from weather import get_weather, get_weather_status
+from weather import get_weather, get_weather_status, check_flight_safety
 from ndvi import get_mock_ndvi, analyze_ndvi
 from telemetry import get_active_machinery
 
@@ -61,12 +61,12 @@ def fetch_field_data(lat: float, lon: float) -> dict:
     description = data["weather"][0]["description"].capitalize()
     ndvi = get_mock_ndvi(lat, lon)
     ndvi_text = analyze_ndvi(ndvi)
-    # Убираем HTML-теги для Streamlit (он работает с markdown)
     ndvi_text_clean = (
         ndvi_text
         .replace("<b>", "**").replace("</b>", "**")
         .replace("NDVI: ", "")
     )
+    safe, danger_reason = check_flight_safety(data)
     return {
         "temp": temp,
         "wind": wind,
@@ -74,6 +74,8 @@ def fetch_field_data(lat: float, lon: float) -> dict:
         "tech_status": tech_status,
         "ndvi": ndvi,
         "ndvi_text": ndvi_text_clean,
+        "flight_safe": safe,
+        "flight_danger_reason": danger_reason,
     }
 
 
@@ -93,6 +95,15 @@ def ndvi_color(ndvi: float) -> str:
     return "#21c354"
 
 
+def ndvi_polygon_color(ndvi: float) -> str:
+    """Цвет полигона на карте по значению NDVI."""
+    if ndvi > 0.6:
+        return "green"
+    if ndvi >= 0.4:
+        return "yellow"
+    return "red"
+
+
 try:
     fields = load_fields()
 except Exception as e:
@@ -110,19 +121,32 @@ with time_col:
 # ── Интерактивная карта ───────────────────────────────────────────────────────
 st.subheader("🗺 Карта полей и техники")
 
-center_lat = fields[0]["lat"]
-center_lon = fields[0]["lon"]
-m = folium.Map(location=[center_lat, center_lon], zoom_start=9, tiles="OpenStreetMap")
+center_lat = fields[0]["coordinates"][0]
+center_lon = fields[0]["coordinates"][1]
+m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles="OpenStreetMap")
 
-# Маркеры полей
+# Полигоны полей с цветом по NDVI
 for field in fields:
-    ndvi_val = get_mock_ndvi(field["lat"], field["lon"])
-    folium.Marker(
-        location=[field["lat"], field["lon"]],
-        tooltip=f"<b>{field['name']}</b><br>NDVI: {ndvi_val}",
-        popup=folium.Popup(f"<b>{field['name']}</b><br>NDVI: {ndvi_val}", max_width=200),
-        icon=folium.Icon(color="green", icon="leaf", prefix="fa"),
-    ).add_to(m)
+    lat = field["coordinates"][0]
+    lon = field["coordinates"][1]
+    ndvi_val = get_mock_ndvi(lat, lon)
+    color = ndvi_polygon_color(ndvi_val)
+    polygon = field.get("polygon", [])
+    if polygon:
+        folium.Polygon(
+            locations=polygon,
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.4,
+            weight=2,
+            tooltip=folium.Tooltip(
+                f"<b>{field['name']}</b><br>"
+                f"Владелец: {field.get('organization', '—')}<br>"
+                f"Культура: {field.get('crop', '—')}<br>"
+                f"NDVI: {ndvi_val}"
+            ),
+        ).add_to(m)
 
 # Динамические маркеры техники из telemetry
 for machine in get_active_machinery(fields):
@@ -149,13 +173,15 @@ cols = st.columns(len(fields))
 
 for col, field in zip(cols, fields):
     name = field["name"]
-    lat = field["lat"]
-    lon = field["lon"]
+    lat = field["coordinates"][0]
+    lon = field["coordinates"][1]
+    organization = field.get("organization", "—")
 
     with col:
         with st.container(border=True):
             st.subheader(f"📌 {name}")
             st.caption(f"🗺 {lat:.4f}°N, {lon:.4f}°E")
+            st.caption(f"🏢 Владелец: **{organization}**")
             st.divider()
 
             try:
@@ -203,9 +229,25 @@ for col, field in zip(cols, fields):
 
             # Панель диспетчеризации
             st.markdown("#### 🎛️ Панель управления")
+            flight_safe = d["flight_safe"]
+            flight_reason = d["flight_danger_reason"]
+
             col1, col2 = st.columns(2)
-            if col1.button("🚁 Направить DJI Agras", key=f"drone_{name}", use_container_width=True):
+            if col1.button(
+                "🚁 Направить DJI Agras",
+                key=f"drone_{name}",
+                use_container_width=True,
+                disabled=not flight_safe,
+            ):
                 st.toast(f"Команда отправлена: DJI Agras T40 вылетает на {name}!", icon="🚁")
+
+            if not flight_safe:
+                st.markdown(
+                    f"<div style='color:#ff4b4b; font-size:0.85em; margin-top:4px'>"
+                    f"⚠️ Вылет запрещен: {flight_reason}!</div>",
+                    unsafe_allow_html=True,
+                )
+
             if col2.button("🚜 Маршрут для трактора", key=f"tractor_{name}", use_container_width=True):
                 st.toast(f"Координаты загружены в автопилот FJDynamics. Трактор выдвигается на {name}.", icon="🚜")
 

@@ -8,12 +8,21 @@ MACHINERY = [
 
 
 def get_active_machinery(fields: list) -> list:
-    """Возвращает список активной техники с динамическими координатами и скоростью."""
+    """Возвращает список активной техники с динамическими координатами внутри полигона поля."""
     result = []
     for machine in MACHINERY:
         field = fields[machine["field_index"]]
-        lat = field["lat"] + random.uniform(-0.005, 0.005)
-        lon = field["lon"] + random.uniform(-0.005, 0.005)
+        polygon = field.get("polygon", [])
+
+        if polygon:
+            lats = [p[0] for p in polygon]
+            lons = [p[1] for p in polygon]
+            lat = random.uniform(min(lats), max(lats))
+            lon = random.uniform(min(lons), max(lons))
+        else:
+            coords = field["coordinates"]
+            lat = coords[0] + random.uniform(-0.005, 0.005)
+            lon = coords[1] + random.uniform(-0.005, 0.005)
 
         if machine["type"] == "drone":
             speed = round(random.uniform(15, 30), 1)
