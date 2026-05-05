@@ -20,6 +20,25 @@ st.set_page_config(
     layout="wide",
 )
 
+# ── Авторизация ───────────────────────────────────────────────────────────────
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("Вход в систему")
+    username = st.text_input("Логин")
+    password = st.text_input("Пароль", type="password")
+    if st.button("Войти"):
+        admin_user = os.getenv("ADMIN_USERNAME", "")
+        admin_pass = os.getenv("ADMIN_PASSWORD", "")
+        if username == admin_user and password == admin_pass:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Неверные данные")
+    st.stop()
+
+# ── Дашборд (только для авторизованных) ──────────────────────────────────────
 st.title("🌾 Панель управления Агрокластером")
 st.caption("Данные о погоде и состоянии вегетации по полям Бухарской области")
 st.divider()
