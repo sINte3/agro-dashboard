@@ -1,0 +1,11 @@
+Задача: Подготовить проект к деплою в облако.
+
+Шаги:
+
+    Проанализируй все .py файлы в проекте (bot.py, dashboard.py, weather.py, ndvi.py, telemetry.py).
+
+    Полностью перезапиши файл requirements.txt.
+
+    Включи в него ВСЕ используемые сторонние библиотеки с указанием стабильных версий. Обязательно убедись, что там присутствуют: streamlit, folium, streamlit-folium, requests, python-telegram-bot и python-dotenv.
+
+    Не добавляй в requirements.txt стандартные библиотеки Python (такие как os, random, logging).
