@@ -41,6 +41,9 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ── Дашборд (только для авторизованных) ──────────────────────────────────────
+if "operations_log" not in st.session_state:
+    st.session_state.operations_log = []
+
 st.title("🌾 Панель управления Агрокластером")
 st.caption("Данные о погоде и состоянии вегетации по полям Бухарской области")
 st.divider()
@@ -242,6 +245,12 @@ for col, field in zip(cols, fields):
                 disabled=not flight_safe,
             ):
                 st.toast(f"Команда отправлена: DJI Agras T40 вылетает на {name}!", icon="🚁")
+                st.session_state.operations_log.append({
+                    "Время": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
+                    "Поле": name,
+                    "Техника": "🚁 DJI Agras T40",
+                    "Команда": "Отправить дрон",
+                })
 
             if not flight_safe:
                 st.markdown(
@@ -252,6 +261,12 @@ for col, field in zip(cols, fields):
 
             if col2.button("🚜 Маршрут для трактора", key=f"tractor_{name}", use_container_width=True):
                 st.toast(f"Координаты загружены в автопилот FJDynamics. Трактор выдвигается на {name}.", icon="🚜")
+                st.session_state.operations_log.append({
+                    "Время": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
+                    "Поле": name,
+                    "Техника": "🚜 FJDynamics Трактор",
+                    "Команда": "Маршрут трактору",
+                })
 
 st.divider()
 
@@ -265,3 +280,57 @@ with st.expander("📈 Динамика вегетации (NDVI) за 30 дне
         columns=["Поле Северное", "Поле Южное", "Поле Экспериментальное"],
     )
     st.line_chart(ndvi_history)
+
+with st.expander("📋 Журнал операций"):
+    if st.session_state.operations_log:
+        df_log = pd.DataFrame(st.session_state.operations_log)
+        st.dataframe(df_log, use_container_width=True, hide_index=True)
+    else:
+        st.info("Операций пока не было. Используйте кнопки управления полями.")
+
+if st.button("🤖 ИИ-анализ состояния"):
+    with st.spinner("Анализируем данные по всем полям..."):
+        lines = []
+        critical, stressed, healthy = [], [], []
+        for field in fields:
+            lat = field["coordinates"][0]
+            lon = field["coordinates"][1]
+            ndvi_val = get_mock_ndvi(lat, lon)
+            if ndvi_val < 0.3:
+                critical.append((field["name"], ndvi_val))
+            elif ndvi_val <= 0.6:
+                stressed.append((field["name"], ndvi_val))
+            else:
+                healthy.append((field["name"], ndvi_val))
+
+        lines.append("## 🤖 ИИ-анализ состояния полей")
+        lines.append("")
+
+        if critical:
+            lines.append("### 🔴 Критическое состояние — требуется немедленное вмешательство:")
+            for name_f, val in critical:
+                lines.append(f"- **{name_f}** (NDVI = {val}): выезд агронома, возможна гибель культуры.")
+
+        if stressed:
+            lines.append("### 🟠 Растения в стрессе — рекомендуется обработка:")
+            for name_f, val in stressed:
+                lines.append(f"- **{name_f}** (NDVI = {val}): точечное внесение удобрений, запланировать вылет DJI Agras T40.")
+
+        if healthy:
+            lines.append("### 🟢 Вегетация в норме:")
+            for name_f, val in healthy:
+                lines.append(f"- **{name_f}** (NDVI = {val}): вмешательство не требуется, продолжать мониторинг.")
+
+        total = len(fields)
+        lines.append("")
+        lines.append(
+            f"**Итого:** {len(healthy)}/{total} полей в норме, "
+            f"{len(stressed)}/{total} в стрессе, "
+            f"{len(critical)}/{total} в критическом состоянии."
+        )
+        if critical or stressed:
+            lines.append("")
+            lines.append("**Рекомендация:** в первую очередь обработайте поля с низким NDVI. "
+                         "Используйте дроны для опрыскивания и тракторы для внесения удобрений.")
+
+    st.markdown("\n".join(lines))
