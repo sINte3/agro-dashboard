@@ -110,7 +110,9 @@ except Exception as e:
     st.error(f"Не удалось загрузить fields.json: {e}")
     st.stop()
 
-btn_col, time_col = st.columns([1, 4])
+cols = st.columns([1, 4])
+btn_col = cols[0]
+time_col = cols[1]
 with btn_col:
     if st.button("🔄 Обновить данные"):
         st.cache_data.clear()
