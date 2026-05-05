@@ -199,6 +199,16 @@ for col, field in zip(cols, fields):
                 unsafe_allow_html=True,
             )
 
+            st.divider()
+
+            # Панель диспетчеризации
+            st.markdown("#### 🎛️ Панель управления")
+            col1, col2 = st.columns(2)
+            if col1.button("🚁 Направить DJI Agras", key=f"drone_{name}", use_container_width=True):
+                st.toast(f"Команда отправлена: DJI Agras T40 вылетает на {name}!", icon="🚁")
+            if col2.button("🚜 Маршрут для трактора", key=f"tractor_{name}", use_container_width=True):
+                st.toast(f"Координаты загружены в автопилот FJDynamics. Трактор выдвигается на {name}.", icon="🚜")
+
 st.divider()
 
 # ── Историческая аналитика ────────────────────────────────────────────────────
