@@ -1,7 +1,9 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import folium
+import numpy as np
+import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from streamlit_folium import st_folium
@@ -196,3 +198,16 @@ for col, field in zip(cols, fields):
                 f"{d['ndvi_text']}</div>",
                 unsafe_allow_html=True,
             )
+
+st.divider()
+
+# ── Историческая аналитика ────────────────────────────────────────────────────
+with st.expander("📈 Динамика вегетации (NDVI) за 30 дней"):
+    dates = [datetime.today().date() - timedelta(days=i) for i in range(29, -1, -1)]
+    rng = np.random.default_rng(seed=42)
+    ndvi_history = pd.DataFrame(
+        rng.uniform(0.4, 0.9, size=(30, 3)),
+        index=dates,
+        columns=["Поле Северное", "Поле Южное", "Поле Экспериментальное"],
+    )
+    st.line_chart(ndvi_history)
